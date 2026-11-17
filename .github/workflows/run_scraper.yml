@@ -1,4 +1,34 @@
-- name: Run scrap.py
+name: Scheduled Auto-Click Scraper
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0,18 */3 * *'
+    - cron: '0 12 2-31/3 * *'
+    - cron: '0 6 3-31/3 * *'
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies and Playwright browsers
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Run scrap.py
         run: python scrap.py
 
       - name: Upload debug screenshot on failure
