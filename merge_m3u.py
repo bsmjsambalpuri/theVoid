@@ -13,7 +13,10 @@ M3U_URLS = [
     "https://raw.githubusercontent.com/amazeyourself/m3u/refs/heads/main/samsungtvplus/in.m3u",
     "https://raw.githubusercontent.com/amazeyourself/m3u/refs/heads/main/samsungtvplus/us.m3u",
     "https://raw.githubusercontent.com/amazeyourself/m3u/refs/heads/main/samsungtvplus/gb.m3u",
-    "https://raw.githubusercontent.com/amazeyourself/m3u/refs/heads/main/yupptvfast.m3u"
+     "https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/refs/heads/main/playlists/roku_all.m3u", 
+    "https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/refs/heads/main/playlists/plutotv_us.m3u", 
+    "https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/refs/heads/main/playlists/plex_us.m3u" ,
+    "https://raw.githubusercontent.com/amazeyourself/m3u/refs/heads/main/yupptvfast.m3u",
 ]
 
 OUTPUT_FILE = "combined.m3u"
