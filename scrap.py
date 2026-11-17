@@ -5,7 +5,7 @@ from playwright.sync_api import sync_playwright
 # --- CONFIGURATION ---
 TARGET_URL = "https://freeiptv2023-d.ottc.xyz/"  # <-- Replace with your actual URL
 NEXT_BUTTON_SELECTOR = "#create-btn"
-WAIT_SECONDS = 6
+WAIT_SECONDS = 10
 OUTPUT_FILE = "next_page_data.json"
 
 
