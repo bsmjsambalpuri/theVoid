@@ -1,23 +1,20 @@
 import json
 from datetime import datetime, timezone
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, expect
 
 # --- CONFIGURATION ---
-TARGET_URL = "https://freeiptv2023-d.ottc.xyz/"  # <-- Replace with your actual URL
+TARGET_URL = "https://your-website-url.com"  # <-- Replace with your actual URL
 NEXT_BUTTON_SELECTOR = "#create-btn"
-WAIT_SECONDS = 10
 OUTPUT_FILE = "next_page_data.json"
 
 
 def scrape_next_page():
     with sync_playwright() as p:
-        # Launch with flags that reduce headless bot detection
         browser = p.chromium.launch(
             headless=True,
             args=["--disable-blink-features=AutomationControlled"]
         )
         
-        # Use a standard Windows Chrome User-Agent and viewport
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
             viewport={"width": 1280, "height": 800}
@@ -26,29 +23,41 @@ def scrape_next_page():
 
         try:
             print(f"1. Opening {TARGET_URL}...")
-            page.goto(TARGET_URL, wait_until="load", timeout=60000)
+            page.goto(TARGET_URL, wait_until="networkidle", timeout=60000)
 
-            print(f"2. Waiting for {WAIT_SECONDS} seconds...")
-            page.wait_for_timeout(WAIT_SECONDS * 1000)
+            # Bring page to front so JS countdown timers don't get throttled
+            page.bring_to_front()
 
-            # Check main page first; if not found, search inside any iframes
+            # Locate the button (main page or iframe)
             button = page.locator(NEXT_BUTTON_SELECTOR)
             if button.count() == 0:
-                print("Button not on main page, checking iframes...")
                 for frame in page.frames:
                     if frame.locator(NEXT_BUTTON_SELECTOR).count() > 0:
                         button = frame.locator(NEXT_BUTTON_SELECTOR)
-                        print("Found button inside an iframe!")
                         break
 
-            # Wait up to 15s for the button to become visible & enabled
-            button.wait_for(state="visible", timeout=15000)
-            
-            print(f"3. Clicking '{NEXT_BUTTON_SELECTOR}'...")
-            button.click(force=True)
+            print("2. Waiting for countdown to finish and button to unlock...")
+            # Wait up to 20 seconds for the button to be visible AND enabled (not disabled)
+            expect(button).to_be_visible(timeout=20000)
+            expect(button).to_be_enabled(timeout=20000)
 
-            # Wait for the next page to finish loading
-            page.wait_for_load_state("networkidle", timeout=30000)
+            # Extra 1.5s buffer after unlock to ensure JS event listeners are attached
+            page.wait_for_timeout(1500)
+
+            print(f"3. Clicking '{NEXT_BUTTON_SELECTOR}' (current value: {button.get_attribute('value')})...")
+            initial_url = page.url
+
+            # Normal click (without force=True) ensures the browser only clicks if truly interactive
+            button.click()
+
+            # Wait for either the URL to change OR the page content to reload
+            try:
+                page.wait_for_url(lambda url: url != initial_url, timeout=15000)
+            except Exception:
+                # If the URL stays the same (e.g. AJAX/SPA update), wait for network & DOM to settle
+                page.wait_for_load_state("networkidle", timeout=15000)
+                page.wait_for_timeout(3000)
+
             print(f"4. Loaded next page: {page.url}")
 
             page_text = page.locator("body").inner_text()
@@ -66,11 +75,7 @@ def scrape_next_page():
 
         except Exception as e:
             print(f"ERROR occurred on URL: {page.url}")
-            print(f"Page title was: {page.title()}")
-            # Save screenshot & HTML so you can inspect why the button wasn't found
             page.screenshot(path="debug_error.png", full_page=True)
-            with open("debug_page.html", "w", encoding="utf-8") as f:
-                f.write(page.content())
             raise e
         finally:
             browser.close()
