@@ -1,6 +1,6 @@
 import json
 from datetime import datetime, timezone
-from playwright.sync_api import sync_playwright, expect
+from playwright.sync_api import sync_playwright
 
 # --- CONFIGURATION ---
 TARGET_URL = "https://freeiptv2023-d.ottc.xyz/"  # <-- Replace with your actual URL
@@ -12,53 +12,73 @@ def scrape_next_page():
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=True,
-            args=["--disable-blink-features=AutomationControlled"]
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+            ]
         )
-        
+
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
             viewport={"width": 1280, "height": 800}
         )
+
+        # Hide navigator.webdriver so anti-bot JS timers don't freeze
+        context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined
+            });
+        """)
+
         page = context.new_page()
 
         try:
             print(f"1. Opening {TARGET_URL}...")
-            page.goto(TARGET_URL, wait_until="networkidle", timeout=60000)
-
-            # Bring page to front so JS countdown timers don't get throttled
+            page.goto(TARGET_URL, wait_until="domcontentloaded", timeout=60000)
             page.bring_to_front()
 
-            # Locate the button (main page or iframe)
-            button = page.locator(NEXT_BUTTON_SELECTOR)
-            if button.count() == 0:
-                for frame in page.frames:
-                    if frame.locator(NEXT_BUTTON_SELECTOR).count() > 0:
-                        button = frame.locator(NEXT_BUTTON_SELECTOR)
-                        break
+            # Simulate mouse movement & scroll to trigger timers that require user activity
+            page.mouse.move(300, 300)
+            page.mouse.wheel(0, 200)
+            page.wait_for_timeout(1000)
+            page.mouse.move(500, 400)
 
-            print("2. Waiting for countdown to finish and button to unlock...")
-            # Wait up to 20 seconds for the button to be visible AND enabled (not disabled)
-            expect(button).to_be_visible(timeout=20000)
-            expect(button).to_be_enabled(timeout=20000)
+            print("2. Waiting for the countdown message to finish...")
+            # Wait up to 30 seconds for "Please wait" text to disappear from the page
+            try:
+                page.get_by_text("Please wait", exact=False).wait_for(state="hidden", timeout=30000)
+                print("   Countdown text disappeared!")
+            except Exception:
+                print("   Warning: 'Please wait' text still visible after 30s.")
 
-            # Extra 1.5s buffer after unlock to ensure JS event listeners are attached
+            # Small buffer after countdown finishes
             page.wait_for_timeout(1500)
 
-            print(f"3. Clicking '{NEXT_BUTTON_SELECTOR}' (current value: {button.get_attribute('value')})...")
-            initial_url = page.url
+            # Check if #create-btn is enabled now
+            button = page.locator(NEXT_BUTTON_SELECTOR)
+            is_disabled = button.is_disabled()
+            print(f"3. Button '{NEXT_BUTTON_SELECTOR}' -> disabled={is_disabled}, value={button.get_attribute('value')}")
 
-            # Normal click (without force=True) ensures the browser only clicks if truly interactive
+            if is_disabled:
+                # Debug: list all buttons/inputs on the page in case another button unlocked instead
+                all_buttons = page.locator("button, input[type='submit'], input[type='button'], a.btn").all()
+                print(f"   Found {len(all_buttons)} clickable elements on page:")
+                for idx, btn in enumerate(all_buttons):
+                    print(f"   [{idx}] id={btn.get_attribute('id')} value={btn.get_attribute('value')} text={btn.inner_text().strip()} disabled={btn.is_disabled()}")
+                raise RuntimeError("Target button remained disabled after countdown.")
+
+            initial_url = page.url
+            print(f"4. Clicking '{NEXT_BUTTON_SELECTOR}'...")
             button.click()
 
-            # Wait for either the URL to change OR the page content to reload
+            # Wait for navigation or DOM update
             try:
                 page.wait_for_url(lambda url: url != initial_url, timeout=15000)
             except Exception:
-                # If the URL stays the same (e.g. AJAX/SPA update), wait for network & DOM to settle
                 page.wait_for_load_state("networkidle", timeout=15000)
                 page.wait_for_timeout(3000)
 
-            print(f"4. Loaded next page: {page.url}")
+            print(f"5. Loaded next page: {page.url}")
 
             page_text = page.locator("body").inner_text()
 
@@ -71,11 +91,13 @@ def scrape_next_page():
             with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
                 json.dump(extracted_data, f, indent=4, ensure_ascii=False)
 
-            print(f"5. Success! Next page data saved to {OUTPUT_FILE}.")
+            print(f"6. Success! Next page data saved to {OUTPUT_FILE}.")
 
         except Exception as e:
             print(f"ERROR occurred on URL: {page.url}")
             page.screenshot(path="debug_error.png", full_page=True)
+            with open("debug_page.html", "w", encoding="utf-8") as f:
+                f.write(page.content())
             raise e
         finally:
             browser.close()
