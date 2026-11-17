@@ -1,0 +1,43 @@
+name: Scheduled Auto-Click Scraper
+
+on:
+  workflow_dispatch: # Allows manual runs from the Actions tab
+  schedule:
+    # Exact 18-hour interval pattern (repeats cleanly every 3 days / 72 hours):
+    # Day 1: 00:00 UTC (05:30 IST) & 18:00 UTC (23:30 IST)
+    # Day 2: 12:00 UTC (17:30 IST)
+    # Day 3: 06:00 UTC (11:30 IST)
+    - cron: '0 0,18 */3 * *'
+    - cron: '0 12 2-31/3 * *'
+    - cron: '0 6 3-31/3 * *'
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write # Allows workflow to commit next_page_data.json back to repo
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies and Playwright browsers
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Run scrap.py
+        run: python scrap.py
+
+      - name: Commit and push updated JSON
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add next_page_data.json
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update scraped data" && git push)
