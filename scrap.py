@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from playwright.sync_api import sync_playwright, expect
 
 # --- CONFIGURATION ---
-TARGET_URL = "https://your-website-url.com"  # <-- Replace with your actual URL
+TARGET_URL = "https://freeiptv2023-d.ottc.xyz/"  # <-- Replace with your actual URL
 NEXT_BUTTON_SELECTOR = "#create-btn"
 OUTPUT_FILE = "next_page_data.json"
 
